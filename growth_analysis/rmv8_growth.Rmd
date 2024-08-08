@@ -1,0 +1,282 @@
+---
+title: "rmv8_growth"
+author: "tzeyee"
+output: html_document
+date: "2024-08-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+
+condition_palette <- c(
+  "No supplement" = "grey",
+  "Mitomycin C" = "#8491B4FF",
+  "Mitomycin C 0.5" = "lightsteelblue",
+  "Mitomycin C 1" = "#8491B4FF",
+  "Mitomycin C 2" = "#3C5488FF",
+  "CSP" = "#F39B7FFF",
+  "CSP 1" = "#F39B7FFF",
+  "CSP 2" = "#B94E49",
+  "CSP 4" = "#7F0012",
+  "Hydrogen peroxide" = "yellowgreen"
+)
+
+mutant_palette_8 <- c(
+  '"RMV8"[rare]' = "magenta",
+  '"RMV8"[rare]~"PRCI::Janus"~"1"' = "purple",
+  '"RMV8"[rare]~"PRCI::Janus"~"2"' = "violet",
+  '"RMV8"[rare]~prophage::cat' = "#1AFF1A", 
+  '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"1"' = "#B3D60D", 
+  '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"2"' = "#FFC107"
+)
+
+mutant_labels_8 <- c(
+  '"RMV8"[rare]' = ''~"RMV8"["rare"]~'',
+  '"RMV8"[rare]~"PRCI::Janus"~"1"' = ''~"RMV8"["rare"]~"PRCI::Janus"~"1"~'',
+  '"RMV8"[rare]~"PRCI::Janus"~"2"' = ''~"RMV8"["rare"]~"PRCI::Janus"~"2"~'',
+  '"RMV8"[rare]~prophage::cat' = ''~"RMV8"["rare"]~phi*"RMV8::"*italic(cat)~'',
+  '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"1"' = ''~"RMV8"["rare"]~phi*"RMV8::"*italic(cat)~"PRCI::Janus"~"1"~'', 
+  '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"2"' = ''~"RMV8"["rare"]~phi*"RMV8::"*italic(cat)~"PRCI::Janus"~"2"~'' 
+)
+
+g <- guide_legend(nrow = 1,
+                  title.position = NULL)
+g2 <- guide_legend(nrow = 2,
+                  title.position = NULL)
+
+```
+
+## Comparison of wild type and PRCI mutant
+
+```{r WT vs PRCI}
+RMV8_rare_vs_prci_growth <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/rare_vs_prci_mutant.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+processed_RMV8_rare_vs_prci_growth <-
+  RMV8_rare_vs_prci_growth %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variant",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variant,sep = '\\.',into = c("Variant","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Condition = "No supplement") %>%
+  dplyr::mutate(Variant =
+                  dplyr::case_when(
+                    Variant == "tvrR" ~ '"RMV8"[rare]',
+                    Variant == "tvrR_PRCI_mutant_1" ~ '"RMV8"[rare]~"PRCI::Janus"~"1"',
+                    Variant == "tvrR_PRCI_mutant_2" ~ '"RMV8"[rare]~"PRCI::Janus"~"2"',
+                  )
+  ) %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds)
+
+
+ggplot(processed_RMV8_rare_vs_prci_growth,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Variant,
+           fill = Variant,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(values = mutant_palette_8,
+                      labels = mutant_labels_8[match(unique(processed_RMV8_rare_vs_prci_growth$Variant),names(mutant_labels_8))],
+                      aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g)
+
+```
+
+## Comparison of procat and rare 
+
+```{r procat vs rare}
+RMV8_rare_vs_procat_growth <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/rare_vs_procat.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+processed_RMV8_rare_vs_procat_growth <-
+  RMV8_rare_vs_procat_growth %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variant",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variant,sep = '\\.',into = c("Variant","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Condition = "No supplement") %>%
+  dplyr::mutate(Variant =
+                  dplyr::case_when(
+                    Variant == "tvrR" ~ '"RMV8"[rare]',
+                    Variant == "prophage_cat" ~ '"RMV8"[rare]~prophage::cat',
+                  )
+  ) %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds)
+
+
+ggplot(processed_RMV8_rare_vs_procat_growth,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Variant,
+           fill = Variant,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(values = mutant_palette_8,
+                      labels = mutant_labels_8[match(unique(processed_RMV8_rare_vs_procat_growth$Variant),names(mutant_labels_8))],
+                      aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g)
+```
+
+## Comparison of procat and prci mutant
+
+```{r procat vs prci mutant}
+RMV8_procat_vs_prci_growth <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/procat_vs_prci_mutant.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+processed_RMV8_procat_vs_prci_growth <-
+  RMV8_procat_vs_prci_growth %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variant",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variant,sep = '\\.',into = c("Variant","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Condition = "No supplement") %>%
+  dplyr::mutate(Variant =
+                  dplyr::case_when(
+                    Variant == "prophage_cat" ~ '"RMV8"[rare]~prophage::cat',
+                    Variant == "prophage_cat_PRCI_mutant_1" ~ '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"1"',
+                    Variant == "prophage_cat_PRCI_mutant_2" ~ '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"2"',
+                  )
+  ) %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds)
+
+
+ggplot(processed_RMV8_procat_vs_prci_growth,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Variant,
+           fill = Variant,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(values = mutant_palette_8,
+                      labels = mutant_labels_8[match(unique(processed_RMV8_procat_vs_prci_growth$Variant),names(mutant_labels_8))],
+                      aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g)
+```
+
+## Comparison of procat_prci and rare_prci mutant
+
+```{r rare_prci vs procat_prci mutant}
+RMV8_procat_prci_vs_rare_prci_growth <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/procat_prci_vs_rare_prci.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+processed_RRMV8_procat_prci_vs_rare_prci_growth <-
+  RMV8_procat_prci_vs_rare_prci_growth %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variant",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variant,sep = '\\.',into = c("Variant","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Condition = "No supplement") %>%
+  dplyr::mutate(Variant =
+                  dplyr::case_when(
+                    Variant == "tvr_PRCI_mutant_1" ~ '"RMV8"[rare]~"PRCI::Janus"~"1"',
+                    Variant == "tvr_PRCI_mutant_2" ~ '"RMV8"[rare]~"PRCI::Janus"~"2"',
+                    Variant == "prophage_PRCI_mutant_1" ~ '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"1"',
+                    Variant == "prophage_PRCI_mutant_2" ~ '"RMV8"[rare]~prophage::cat~"PRCI::Janus"~"2"',
+                  )
+  ) %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds)
+
+
+ggplot(processed_RRMV8_procat_prci_vs_rare_prci_growth,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Variant,
+           fill = Variant,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(values = mutant_palette_8,
+                      labels = mutant_labels_8[match(unique(processed_RRMV8_procat_prci_vs_rare_prci_growth$Variant),names(mutant_labels_8))],
+                      aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g2, fill = g2)
+
+```
+

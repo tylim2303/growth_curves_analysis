@@ -1,0 +1,214 @@
+---
+title: "rmv7 growth and induction"
+output: html_document
+date: "2024-08-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+
+
+condition_palette <- c(
+  "No supplement" = "grey",
+  "Mitomycin C" = "#8491B4FF",
+  "Mitomycin C 0.5" = "lightsteelblue",
+  "Mitomycin C 1" = "#8491B4FF",
+  "Mitomycin C 2" = "#3C5488FF",
+  "CSP" = "#F39B7FFF",
+  "Hydrogen peroxide" = "yellowgreen"
+)
+
+mutant_palette_7 <- c(
+  '"RMV7"[rare]' = "magenta",
+  '"RMV7"[rare]~"PRCI::Janus"~"1"' = "purple",
+  '"RMV7"[rare]~"PRCI::Janus"~"2"' = "violet"
+)
+
+mutant_labels_7 <- c(
+  '"RMV7"[rare]' = ''~"RMV7"["rare"]~'',
+  '"RMV7"[rare]~"PRCI::Janus"~"1"' = ''~"RMV7"["rare"]~"PRCI::Janus"~"1"~'',
+  '"RMV7"[rare]~"PRCI::Janus"~"2"' = ''~"RMV7"["rare"]~"PRCI::Janus"~"2"~''
+)
+
+g <- guide_legend(nrow = 1,
+                  title.position = NULL)
+
+```
+
+## Plotting the effect of stimuli on RMV7 PRCI mutant
+```{r RMV7 induction}
+RMV7_growth_induction <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/RMV7_growth_induction.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+
+RMV7_prci_growth_induction <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/RMV7_prci_growth_induction.csv",
+                                       head=TRUE,
+                                       sep=",",
+                                       row.names=NULL, 
+                                       na.strings ='#DIV/0!')
+
+processed_RMV7_growth_induction <-
+  RMV7_growth_induction %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variants",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variants,sep = '\\.',into = c("Condition","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Variant = '"RMV7"~"PRCI::Janus"') %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds) %>%
+  dplyr::mutate(Condition =
+                  dplyr::case_when(
+                    Condition == "CSP1" ~ "CSP",
+                    Condition == "Media" ~ "No supplement",
+                    Condition == "MMC" ~ "Mitomycin C",
+                    Condition == "H2O2" ~ "Hydrogen peroxide"
+                  )
+  )
+
+processed_RMV7_prci_growth_induction <-
+  RMV7_prci_growth_induction %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variants",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variants,sep = '\\.',into = c("Condition","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Variant = '"RMV7"~"PRCI::Janus"') %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds) %>%
+  dplyr::mutate(Condition =
+                  dplyr::case_when(
+                    Condition == "CSP1" ~ "CSP",
+                    Condition == "Media" ~ "No supplement",
+                    Condition == "MMC" ~ "Mitomycin C",
+                    Condition == "H2O2" ~ "Hydrogen peroxide"
+                  )
+  )
+
+ggplot(processed_RMV7_growth_induction,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Condition,
+           fill = Condition,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(#labels = condition_palette[names(condition_palette) %in% unique(better_RMV7R_rarevsprci_growth_data$Condition)],
+    values = condition_palette,
+    aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g) + 
+  labs(title.position="middle", title = "RMV7rare")
+
+ggplot(processed_RMV7_prci_growth_induction,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Condition,
+           fill = Condition,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(#labels = condition_palette[names(condition_palette) %in% unique(better_RMV7R_rarevsprci_growth_data$Condition)],
+    values = condition_palette,
+    aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g) + 
+  labs(title.position="middle", title = "RMV7rare PRCI::Janus")
+
+```
+
+## Comparison of wild type and PRCI mutant
+
+```{r WT vs PRCI}
+RMV7_prci_growth <- read.csv(file="Desktop/ICL/PJ2- Nic/growth curves/RMV7R_prci_growth.csv",head=TRUE,sep=",",row.names=NULL, na.strings ='#DIV/0!')
+
+processed_RMV7_prci_growth <-
+  RMV7_prci_growth %>% 
+  tidyr::pivot_longer(-Time,names_to = "Variant",values_to = "OD600") %>% #assign column with name to "condition" and those with values to "OD600"
+  tidyr::separate(Variant,sep = '\\.',into = c("Variant","Replicate")) %>% #as name will be Media, Media1, Media2, this is used to remove the numbers and indicate which replicate they are 
+  dplyr::mutate(Replicate = dplyr::if_else(is.na(Replicate),"0",Replicate)) %>% #if no number, replace with "0"
+  dplyr::mutate(Condition = "No supplement") %>%
+  dplyr::mutate(Variant =
+                  dplyr::case_when(
+                    Variant == "RMV7R" ~ '"RMV7"[rare]',
+                    Variant == "RMV7R_prci_mutant" ~ '"RMV7"[rare]~"PRCI::Janus"~"1"')
+  ) %>%
+  dplyr::group_by(Time,Condition,Variant) %>% #group them by time and condition 
+  dplyr::summarise(
+    median_OD600 = median(OD600),
+    min_OD600 = min(OD600),
+    max_OD600 = max(OD600)
+  ) %>% 
+  dplyr::ungroup() %>%
+  tidyr::separate(Time,
+                  sep = ':',
+                  into = c("Hours","Minutes","Seconds")) %>%
+  dplyr::mutate(Hours = as.numeric(as.character(Hours))) %>%
+  dplyr::mutate(Minutes = dplyr::if_else(Minutes == 30, 0.5, 0)) %>%
+  dplyr::mutate(Time = Hours+Minutes) %>%
+  dplyr::select(-Hours,-Minutes,-Seconds)
+
+
+ggplot(processed_RMV7_prci_growth,
+       aes(x = Time,
+           y = median_OD600,
+           ymin = min_OD600,
+           ymax = max_OD600,
+           colour = Variant,
+           fill = Variant,
+           group = interaction(Variant,Condition)
+       )
+) +
+  geom_ribbon(alpha = 0.5, linetype = 0) +
+  geom_line() +
+  ylab(expression(OD[600])) +
+  xlab("Time (h)") +
+  scale_colour_manual(values = mutant_palette_7,
+                      labels = mutant_labels_7[match(unique(processed_RMV7_prci_growth$Variant),names(mutant_labels_7))],
+                      aesthetics = c("fill","colour")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8)) +
+  guides(colour = g, fill = g)
+
+```
+
